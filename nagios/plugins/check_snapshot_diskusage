@@ -1,0 +1,58 @@
+#!/bin/sh
+#
+# Nagios script to monitor LVM snapshot disk usage
+# Written by Thomas Martensson <thma01@gmail.com>
+
+USAGE="Usage: $basename $0 -W WARNING VALUE -C CRITICAL VALUE"
+
+if [ -f /usr/lib64/nagios/plugins/utils.sh ]; then
+	. /usr/lib64/nagios/plugins/utils.sh
+ else
+	STATE_OK=0
+	STATE_WARNING=1
+	STATE_CRITICAL=2
+	STATE_UNKNOWN=3
+	STATE_DEPENDENT=4 
+fi
+
+# The lvs needs superuser privileges
+if [ `whoami` != "root" ]; then
+	SUDO="sudo"
+fi
+
+# We need arguments
+if [ $# -eq "0" ]; then
+  echo $USAGE
+  exit 3
+fi
+
+while getopts ":C:W:" opt; do
+  case $opt in
+    C) CRITICAL=$OPTARG;;
+    W) WARNING=($OPTARG);;
+    *) echo $USAGE
+      exit 3;;
+  esac
+done
+
+# Get mounted snapshots and parse out percentage used and mountpount
+DISK=$(for i in $($SUDO /usr/sbin/lvs | awk '$3 ~ /^s/ { print $1 }'); do MOUNTS=$(mount | grep $i | awk '{ print $3 }'); df -h $MOUNTS| awk '$5 ~ /[0-9]/ { print $(NF-1),$NF }'|sed 's/%//'; done| sort -rn)
+
+# Check snapshot filesystem usage
+CHECK=$( echo "$DISK" | awk -v crit=$CRITICAL -v warn=$WARNING '{ 
+	if ($1 >= crit) usage="CRITICAL";
+	else if ($1 >= warn) usage="WARNING";
+	else usage="OK";
+print usage,"-",$1"% used","on",$2","; }')
+
+# We sort on diskusage in $DISK so the first one is the most critical one
+STATUS=$(echo $CHECK | awk '{ print $1 }')
+
+if [ "$STATUS" = "CRITICAL" ]; then
+	echo $CHECK|sed 's/,$//'; exit $STATE_CRITICAL 
+ elif [ "$STATUS" = "WARNING" ]; then 
+	echo $CHECK|sed 's/,$//'; exit $STATE_WARNING
+ elif [ "$STATUS" = "OK" ]; then 
+	echo $CHECK|sed 's/,$//'; exit $STATE_OK
+fi
+

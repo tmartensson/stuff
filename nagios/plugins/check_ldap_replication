@@ -1,0 +1,55 @@
+#!/bin/bash
+# 
+# Nagios script to monitor LDAP replication, check is based on contextCSN
+# Written by Thomas Martensson <thma01@gmail.com>
+#
+
+USAGE=$(echo "Usage: $basename $0 -D \"dc=example,dc=com\" -M master.example.com -S slave.example.com. To use more than one slave, use -M \"slave1.example.com slave2.example.com\"")
+
+# We need arguments
+if [ $# -eq "0" ]; then
+	echo $USAGE
+	exit 3
+fi
+
+while getopts ":M:S:D:" opt; do 
+	case $opt in 
+		M) LDAP_MASTER=$OPTARG;;
+		S) LDAP_SLAVES=($OPTARG);;
+		D) LDAP_DN="$OPTARG";;
+		*) echo $USAGE
+			 exit 3;;
+	esac
+done
+
+
+if [ -f /usr/lib64/nagios/plugins/utils.sh ]; then
+	  . /usr/lib64/nagios/plugins/utils.sh
+ else
+	  STATE_OK=0
+	  STATE_WARNING=1
+ 	  STATE_CRITICAL=2
+	  STATE_UNKNOWN=3
+	  STATE_DEPENDENT=4
+fi
+
+# Get contextCSN for the master
+LDAP_MASTER_RESULT=$(ldapsearch -h $LDAP_MASTER -x -b "$LDAP_DN" '(contextCSN=*)' contextCSN -LLL 2> /dev/null |egrep '^contextCSN')
+	if [ $? != 0 ]; then
+		echo "CRITICAL - Problem connecting to LDAP master ($LDAP_MASTER) ";exit $STATE_CRITICAL
+	fi
+
+# Get contextCSN for the slaves
+for ldapserver in "${LDAP_SLAVES[@]}"
+	do
+		LDAP_SLAVE_RESULT=$(ldapsearch -h $ldapserver -x -b "$LDAP_DN" '(contextCSN=*)' contextCSN -LLL 2> /dev/null |egrep '^contextCSN')
+			if [ $? != 0 ]; then
+				echo "WARNING - Problem connecting to LDAP slave: $ldapserver";exit $STATE_WARNING
+			elif [ "$LDAP_MASTER_RESULT" != "$LDAP_SLAVE_RESULT" ]; then
+				echo "CRITICAL - LDAP replication is not working"; exit $STATE_CRITICAL	
+			fi
+done
+
+# If we got here everything is OK
+echo "OK - [$LDAP_MASTER_RESULT], LDAP Master: $LDAP_MASTER LDAP Slaves: $LDAP_SLAVES"; exit $STATE_OK
+

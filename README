@@ -1,3 +1,12 @@
-Yay!
+Git repository full of ugliness written in bash-ish
 
-Git repository full of ugliness
+nagios/plugins/check_ldap_replication
+ Script to monitor LDAP replication, the check is based on contextCSN and works with openldap 2.3
+
+nagios/plugins/check_snapshot_diskusage
+ Nagios script to monitor LVM snapshot disk usage (not snapshot usage)
+
+nagios/plugins/check_snapshot_usage
+ Nagios script to monitor LVM snapshot usage
+
+

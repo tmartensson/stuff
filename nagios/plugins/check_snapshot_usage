@@ -1,0 +1,61 @@
+#!/bin/sh
+#
+# Nagios script to monitor LVM snapshot usage
+# Written by Thomas Martensson <thma01@gmail.com>
+#
+
+USAGE="Usage: $basename $0 -W WARNING VALUE -C CRITICAL VALUE"
+
+if [ -f /usr/lib64/nagios/plugins/utils.sh ]; then
+	. /usr/lib64/nagios/plugins/utils.sh
+ else
+	STATE_OK=0
+	STATE_WARNING=1
+	STATE_CRITICAL=2
+	STATE_UNKNOWN=3
+	STATE_DEPENDENT=4 
+fi
+
+# The lvs command needs superuser privileges
+if [ `whoami` != "root" ]; then
+	SUDO="sudo"
+fi
+
+# We need arguments
+if [ $# -eq "0" ]; then
+  echo $USAGE
+  exit 3
+fi
+
+while getopts ":C:W:" opt; do
+  case $opt in
+    C) CRITICAL=$OPTARG;;
+    W) WARNING=($OPTARG);;
+    *) echo $USAGE
+      exit 3;;
+  esac
+done
+
+# Check snapshot usage
+CHECK=$($SUDO /usr/sbin/lvs | /bin/awk -v crit=$CRITICAL -v warn=$WARNING '$6 ~ /[0-9]/ { 
+	if ($6 >= crit) status="CRITICAL";
+	else if ($6 >= warn) status="WARNING"; 
+	else status="OK"; 
+print status,"-",$6"% used on "$1","; }'| sort -rnk3)
+
+# If we sort on key 3 and use flags r & n we get the most critical one first.
+STATUS=$(echo $CHECK | awk '{ print $1 }')
+
+if [ "$STATUS" = "CRITICAL" ]; then
+	echo $CHECK|sed 's/,$//'; exit $STATE_CRITICAL 
+ elif [ "$STATUS" = "WARNING" ]; then 
+	echo $CHECK|sed 's/,$//'; exit $STATE_WARNING
+ elif [ "$STATUS" = "OK" ]; then 
+	echo $CHECK|sed 's/,$//'; exit $STATE_OK
+fi
+
+# No snapshots?
+if [ -z $CHECK ]; then
+ echo "OK - No snapshots found"; exit $STATE_OK
+fi 
+
