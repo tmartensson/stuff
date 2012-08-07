@@ -38,7 +38,7 @@ check_diskusage()
     CRIT=90
     SERVICENAME="Diskusage"
     
-    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do /usr/sbin/vzctl exec $CT df -h / | sed 's/%//g;/^Filesystem/d'| awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{ 
+    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do sudo /usr/sbin/vzctl exec $CT df -h / | sed 's/%//g;/^Filesystem/d'| awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{ 
       if ($5 >= crit) print "CRITICAL : diskusage in VZ container "ct,"is at "$5"%"; 
       else if ($5 >= warn) print "WARNING : diskusage in VZ container "ct,"is at "$5"%";}';  
     done | sort -rn -k10)
@@ -52,9 +52,9 @@ check_loadavg()
     CRIT="8.00"
     SERVICENAME="Load average"
     
-    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do /usr/sbin/vzctl exec $CT uptime|sed 's/,//g' | awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{
-      if ($8 > crit) print "CRITICAL : Load avg in VZ container "ct,"is at "$8;
-      else if ($8 > warn) print "WARNING : Load avg in VZ container "ct,"is at "$8;}'; 
+    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do sudo /usr/sbin/vzctl exec $CT uptime|sed 's/,//g' | awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{
+      if ($11 > crit) print "CRITICAL : Load avg in VZ container "ct,"is at "$11;
+      else if ($11 > warn) print "WARNING : Load avg in VZ container "ct,"is at "$11;}'; 
     done | sort -rn -k11)
     
     nagios_status
