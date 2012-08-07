@@ -1,0 +1,105 @@
+#!/bin/bash
+# Nagios script to monitor OpenVZ guests memory usage, disk usage, load average and 
+# how many containers that are in running/stopped state.
+#
+# Written 2012-08-07 by Thomas Martensson <thma01@gmail.com>
+#
+# nrpe user must have superuser privileges in order to run the vzlist and vzctl commands and to read the user_beancounters file. Add this to /etc/sudoers if nrpe is running as user nagios:
+# nagios          host.example.com = NOPASSWD: /usr/sbin/vzlist
+# nagios          host.example.com = NOPASSWD: /usr/sbin/vzctl
+# nagios          host.example.com = NOPASSWD: /bin/cat /proc/user_beancounters
+
+if [ -f /usr/lib64/nagios/plugins/utils.sh ]; then
+    . /usr/lib64/nagios/plugins/utils.sh
+ else
+    STATE_OK=0
+    STATE_WARNING=1
+    STATE_CRITICAL=2
+    STATE_UNKNOWN=3
+    STATE_DEPENDENT=4
+fi
+
+nagios_status()
+{
+STATUS=$(echo $CHECK | awk '{ print $1 }')
+if [ "$STATUS" = "CRITICAL" ]; then
+    echo $CHECK|sed 's/,$//'; exit $STATE_CRITICAL
+ elif [ "$STATUS" = "WARNING" ]; then
+    echo $CHECK|sed 's/,$//'; exit $STATE_WARNING
+ else
+    echo "OK: $SERVICENAME for all OpenVZ containers is below the warning value of $WARN"; exit $STATE_OK
+fi
+}
+
+
+check_diskusage()
+{
+    WARN=80
+    CRIT=90
+    SERVICENAME="Diskusage"
+    
+    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do /usr/sbin/vzctl exec $CT df -h / | sed 's/%//g;/^Filesystem/d'| awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{ 
+      if ($5 >= crit) print "CRITICAL : diskusage in VZ container "ct,"is at "$5"%"; 
+      else if ($5 >= warn) print "WARNING : diskusage in VZ container "ct,"is at "$5"%";}';  
+    done | sort -rn -k10)
+    
+    nagios_status
+}
+
+check_loadavg()
+{
+    WARN="6.00"
+    CRIT="8.00"
+    SERVICENAME="Load average"
+    
+    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do /usr/sbin/vzctl exec $CT uptime|sed 's/,//g' | awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{
+      if ($8 > crit) print "CRITICAL : Load avg in VZ container "ct,"is at "$8;
+      else if ($8 > warn) print "WARNING : Load avg in VZ container "ct,"is at "$8;}'; 
+    done | sort -rn -k11)
+    
+    nagios_status
+}
+
+check_mem()
+{
+    WARN="80.00"
+    CRIT="90.00"
+    SERVICENAME="Memory usage"
+
+    CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do sudo cat /proc/user_beancounters | grep -A 23 $CT: | grep physpages | awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{ mem_used=($2/$5)*100 } END { 
+      if (mem_used >= crit) printf "CRITICAL : OpenVZ container "ct" is using %2.2f% memory ", mem_used;
+      else if (mem_used >= warn) printf "WARNING : OpenVZ container "ct" is using %2.2f% memory ", mem_used;}'; 
+    done| sort -rn -k6)
+
+    nagios_status
+}
+
+guest_status()
+{
+    CHECK=$(sudo /usr/sbin/vzlist -a)
+    CHECK_RUNNING=$(echo "$CHECK" | grep -c running)
+    CHECK_STOPPED=$(echo "$CHECK" | grep -c stopped)
+
+    echo "OK : $CHECK_RUNNING OpenVZ containers in state running and $CHECK_STOPPED OpenVZ containers in state stopped | running=$CHECK_RUNNING, stopped=$CHECK_STOPPED"; exit $STATE_OK
+}
+
+
+
+case "$1" in
+    disk)
+      check_diskusage
+      ;;
+    load)
+      check_loadavg
+      ;;
+    mem)
+      check_mem
+      ;;
+    status)
+      guest_status
+      ;;
+    *)
+    echo "Usage: $0 {disk|load|mem|status}"
+    exit $STATE_UNKNOWN
+esac
+
