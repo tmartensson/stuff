@@ -10,4 +10,5 @@ nagios/plugins/check_snapshot_usage
  Nagios script to monitor LVM snapshot usage
 
 nagios/plugins/check_vzguest
-  Nagios script to monitor OpenVZ containers memory usage, load average, disk usage and how many containers that are in runnins/stopped state.
+ Nagios script to monitor OpenVZ containers memory usage, load average, disk usage and how many containers that are in runnins/stopped state. Also monitors global AIO usage on the OpenVZ server. 
+ 
