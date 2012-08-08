@@ -27,7 +27,7 @@ if [ "$STATUS" = "CRITICAL" ]; then
  elif [ "$STATUS" = "WARNING" ]; then
     echo $CHECK|sed 's/,$//'; exit $STATE_WARNING
  else
-    echo "OK: $SERVICENAME for all OpenVZ containers is below the warning value of $WARN"; exit $STATE_OK
+    echo "OK - $SERVICENAME for all OpenVZ containers is below the warning value of $WARN"; exit $STATE_OK
 fi
 }
 
@@ -39,8 +39,8 @@ check_diskusage()
     SERVICENAME="Diskusage"
     
     CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do sudo /usr/sbin/vzctl exec $CT df -h / | sed 's/%//g;/^Filesystem/d'| awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{ 
-      if ($5 >= crit) print "CRITICAL : diskusage in VZ container "ct,"is at "$5"%"; 
-      else if ($5 >= warn) print "WARNING : diskusage in VZ container "ct,"is at "$5"%";}';  
+      if ($5 >= crit) print "CRITICAL - diskusage in VZ container "ct,"is at "$5"%"; 
+      else if ($5 >= warn) print "WARNING - diskusage in VZ container "ct,"is at "$5"%";}';  
     done | sort -rn -k10)
     
     nagios_status
@@ -53,8 +53,8 @@ check_loadavg()
     SERVICENAME="Load average"
     
     CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do sudo /usr/sbin/vzctl exec $CT uptime|sed 's/,//g' | awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{
-      if ($11 > crit) print "CRITICAL : Load avg in VZ container "ct,"is at "$11;
-      else if ($11 > warn) print "WARNING : Load avg in VZ container "ct,"is at "$11;}'; 
+      if ($11 > crit) print "CRITICAL - Load avg in VZ container "ct,"is at "$11;
+      else if ($11 > warn) print "WARNING - Load avg in VZ container "ct,"is at "$11;}'; 
     done | sort -rn -k11)
     
     nagios_status
@@ -67,8 +67,8 @@ check_mem()
     SERVICENAME="Memory usage"
 
     CHECK=$(for CT in $(sudo /usr/sbin/vzlist -H -o ctid); do sudo cat /proc/user_beancounters | grep -A 23 $CT: | grep physpages | awk -v ct=$CT -v warn=$WARN -v crit=$CRIT '{ mem_used=($2/$5)*100 } END { 
-      if (mem_used >= crit) printf "CRITICAL : OpenVZ container "ct" is using %2.2f% memory ", mem_used;
-      else if (mem_used >= warn) printf "WARNING : OpenVZ container "ct" is using %2.2f% memory ", mem_used;}'; 
+      if (mem_used >= crit) printf "CRITICAL - OpenVZ container "ct" is using %2.2f% memory ", mem_used;
+      else if (mem_used >= warn) printf "WARNING - OpenVZ container "ct" is using %2.2f% memory ", mem_used;}'; 
     done| sort -rn -k6)
 
     nagios_status
@@ -80,10 +80,35 @@ guest_status()
     CHECK_RUNNING=$(echo "$CHECK" | grep -c running)
     CHECK_STOPPED=$(echo "$CHECK" | grep -c stopped)
 
-    echo "OK : $CHECK_RUNNING OpenVZ containers in state running and $CHECK_STOPPED OpenVZ containers in state stopped | running=$CHECK_RUNNING, stopped=$CHECK_STOPPED"; exit $STATE_OK
+    echo "OK - $CHECK_RUNNING OpenVZ containers in state running and $CHECK_STOPPED OpenVZ containers in state stopped | running=$CHECK_RUNNING, stopped=$CHECK_STOPPED"; exit $STATE_OK
 }
 
+check_aio()
+{
+    WARN="93.00"
+    CRIT="96.00"
 
+    AIO_AVAIL=$(cat /proc/sys/fs/aio-max-nr)
+    AIO_USED=$(cat /proc/sys/fs/aio-nr)
+
+    CHECK=$(echo $AIO_AVAIL $AIO_USED | awk -v warn=$WARN -v crit=$CRIT '{ 
+      aio_percent=($2/$1)*100 } END {
+          if (aio_percent >= crit) printf "CRITICAL - %2.2f percent of system-wide asynchronous I/O requests is beeing used | aio_usage="aio_percent, aio_percent;
+          else if (aio_percent >= warn) printf "WARNING - %2.2f percent of system-wide asynchronous I/O requests is beeing used | aio_usage="aio_percent, aio_percent;
+          else printf "OK - %2.2f percent of system-wide asynchronous I/O requests is beeing used | aio_usage="aio_percent, aio_percent;
+      }')
+
+	# Need to use a separate exit here since I want to have the performancedata even is the check is not in critcal/warning state.
+        STATUS=$(echo $CHECK | awk '{ print $1 }')
+        if [ "$STATUS" = "CRITICAL" ]; then
+           echo $CHECK ; exit $STATE_CRITICAL
+          elif [ "$STATUS" = "WARNING" ]; then
+           echo $CHECK ; exit $STATE_WARNING
+          else
+           echo $CHECK ; exit $STATE_OK
+        fi
+
+}
 
 case "$1" in
     disk)
@@ -95,11 +120,14 @@ case "$1" in
     mem)
       check_mem
       ;;
+    aio)
+      check_aio
+      ;;
     status)
       guest_status
       ;;
     *)
-    echo "Usage: $0 {disk|load|mem|status}"
+    echo "Usage: $0 {disk|load|mem|aio|status}"
     exit $STATE_UNKNOWN
 esac
 
