@@ -12,3 +12,5 @@ nagios/plugins/check_snapshot_usage
 nagios/plugins/check_vzguest
  Nagios script to monitor OpenVZ containers memory usage, load average, disk usage and how many containers that are in runnins/stopped state. Also monitors global AIO usage on the OpenVZ server. 
  
+tools/proxmox/update_admin_users.sh
+ A script that extract users from /etc/group and add them in a admin group in proxmox. You can also add PVE users, for example a API user, in a comma-separated list, but you must set a password for the PVE users manually.
